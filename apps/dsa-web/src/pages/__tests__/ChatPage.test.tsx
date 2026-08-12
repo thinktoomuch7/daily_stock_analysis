@@ -2132,9 +2132,18 @@ describe('ChatPage', () => {
     );
 
     const viewport = await screen.findByTestId('chat-message-scroll');
-    Object.defineProperty(viewport, 'scrollTop', { configurable: true, value: 0 });
+    Object.defineProperty(viewport, 'scrollTop', {
+      configurable: true,
+      writable: true,
+      value: 0,
+    });
     Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 400 });
     Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1200 });
+    const scrollToMock = vi.fn();
+    Object.defineProperty(viewport, 'scrollTo', {
+      configurable: true,
+      value: scrollToMock,
+    });
 
     fireEvent.scroll(viewport);
 
@@ -2154,7 +2163,48 @@ describe('ChatPage', () => {
 
     fireEvent.click(jumpButton);
 
-    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(scrollToMock).toHaveBeenCalledWith({ top: 1200, behavior: 'smooth' });
+  });
+
+  it('scrolls to the latest messages when opening a session with history', async () => {
+    mockStoreState.messages = [
+      { id: 'user-1', role: 'user', content: '请分析 600519' },
+      { id: 'assistant-1', role: 'assistant', content: '趋势偏强', skillName: '趋势分析' },
+      { id: 'user-2', role: 'user', content: '那现在能买吗？' },
+      { id: 'assistant-2', role: 'assistant', content: '建议等待回踩', skillName: '趋势分析' },
+    ];
+
+    const { rerender } = render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ChatPage />
+      </MemoryRouter>
+    );
+
+    const viewport = await screen.findByTestId('chat-message-scroll');
+    Object.defineProperty(viewport, 'scrollTop', {
+      configurable: true,
+      writable: true,
+      value: 0,
+    });
+    Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 400 });
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1600 });
+
+    mockStoreState.sessionId = 'session-reopen';
+    rerender(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ChatPage />
+      </MemoryRouter>
+    );
+
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => resolve());
+        });
+      });
+    });
+
+    expect(viewport.scrollTop).toBe(1600);
   });
 });
 

@@ -386,6 +386,16 @@ const ChatPage: React.FC = () => {
   }, []);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
+    const viewport = messagesViewportRef.current;
+    if (viewport) {
+      const top = viewport.scrollHeight;
+      if (behavior === 'smooth' && typeof viewport.scrollTo === 'function') {
+        viewport.scrollTo({ top, behavior: 'smooth' });
+      } else {
+        viewport.scrollTop = top;
+      }
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior });
   }, []);
 
@@ -399,9 +409,13 @@ const ChatPage: React.FC = () => {
     syncScrollState();
   }, [syncScrollState]);
 
+  // Opening / switching a session should land on the latest messages, not the first line.
+  // Do not sync sticky state from the initial scrollTop=0 layout, or auto-scroll gets cancelled.
   useEffect(() => {
-    syncScrollState();
-  }, [syncScrollState, sessionId]);
+    shouldStickToBottomRef.current = true;
+    pendingScrollBehaviorRef.current = 'auto';
+    setShowJumpToBottom(false);
+  }, [sessionId]);
 
   useEffect(() => {
     const behavior = pendingScrollBehaviorRef.current;
@@ -413,12 +427,24 @@ const ChatPage: React.FC = () => {
       return;
     }
 
+    let secondFrame = 0;
     const frame = window.requestAnimationFrame(() => {
       scrollToBottom(behavior);
+      // Markdown / layout can grow after the first paint; re-stick once more.
+      secondFrame = window.requestAnimationFrame(() => {
+        if (shouldStickToBottomRef.current) {
+          scrollToBottom('auto');
+        }
+      });
       pendingScrollBehaviorRef.current = loading ? 'auto' : 'smooth';
     });
 
-    return () => window.cancelAnimationFrame(frame);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (secondFrame) {
+        window.cancelAnimationFrame(secondFrame);
+      }
+    };
   }, [messages, progressSteps, loading, sessionId, scrollToBottom]);
 
   useEffect(() => {
