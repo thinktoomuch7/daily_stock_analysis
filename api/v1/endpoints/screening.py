@@ -241,6 +241,15 @@ def screening_history_detail(
     return _service(config, db_manager).history_detail(run_id)
 
 
+@router.delete("/history/{run_id}")
+def screening_history_delete(
+    run_id: str,
+    config: Config = Depends(get_config_dep),
+    db_manager: DatabaseManager = Depends(get_database_manager),
+) -> Dict[str, Any]:
+    return _service(config, db_manager).delete_history(run_id)
+
+
 @router.get("/source-history")
 def screening_source_history(
     limit: int = Query(100, ge=1, le=100),

@@ -53,9 +53,10 @@ SCREENING_EASTMONEY_JITTER_SEC=0.3
 | `/api/v1/screening/screen/tasks/{task_id}` | GET | 查询任务进度、错误或最终结果 |
 | `/api/v1/screening/history` | GET | 按策略、市场查询最近完成的选股运行摘要 |
 | `/api/v1/screening/history/{run_id}` | GET | 读取一条持久化的完整选股结果 |
+| `/api/v1/screening/history/{run_id}` | DELETE | 删除一条持久化选股运行记录 |
 | `/api/v1/screening/source-history` | GET | 汇总历史运行中的快照源命中、错误和降级次数 |
 
-后台任务使用 `report_type=screening_screen`，Web 会保存活动任务 ID，并在页面恢复时继续轮询。任务状态会分别提示全市场快照、候选上下文、LLM 重排、最终评分和新闻事件增强等阶段；完成后的结果同时写入 DSA 数据库，因此服务重启后仍可按 `run_id` 查询。
+后台任务使用 `report_type=screening_screen`，Web 会保存活动任务 ID，并在页面恢复时继续轮询。任务状态会分别提示全市场快照、候选上下文、LLM 重排、最终评分和新闻事件增强等阶段；完成后的结果同时写入 DSA 数据库，因此服务重启后仍可按 `run_id` 查询。Web 选股页会加载最近运行历史，并在无进行中任务时自动恢复最近一次结果；用户也可点选任意历史记录查看完整候选，便于回看与比对选股效果。历史列表支持删除单条记录；删除当前正在查看的条目时，页面会同步清空结果区。
 
 ## 核心流程
 

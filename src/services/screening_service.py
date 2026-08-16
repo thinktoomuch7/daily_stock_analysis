@@ -946,6 +946,33 @@ class ScreeningService:
             )
         return {"enabled": True, **run}
 
+    def delete_history(self, run_id: str) -> Dict[str, Any]:
+        _ensure_screening_enabled(self.config)
+        db_manager = self._require_history_database()
+        normalized_run_id = _env_text(run_id)
+        if not normalized_run_id:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "invalid_request",
+                    "message": "run_id 不能为空。",
+                },
+            )
+        deleted = db_manager.delete_screening_run(normalized_run_id)
+        if deleted <= 0:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "screening_run_not_found",
+                    "message": f"选股运行 {normalized_run_id} 不存在。",
+                },
+            )
+        return {
+            "enabled": True,
+            "deleted": deleted,
+            "run_id": normalized_run_id,
+        }
+
     def source_history(self, *, limit: int = 100) -> Dict[str, Any]:
         _ensure_screening_enabled(self.config)
         db_manager = self._require_history_database()

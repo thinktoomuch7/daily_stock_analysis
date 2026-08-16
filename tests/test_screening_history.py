@@ -6,6 +6,8 @@ from __future__ import annotations
 import unittest
 from unittest.mock import Mock, patch
 
+from fastapi import HTTPException
+
 from src.config import Config
 from src.services.screening.strategy import list_strategies
 from src.services.screening_service import ScreeningService, _build_dsa_candidate_context
@@ -190,6 +192,30 @@ class ScreeningHistoryTestCase(unittest.TestCase):
         self.assertEqual(source_history["fallback_runs"], 1)
         self.assertEqual(source_history["sources"]["sina"]["selected_runs"], 1)
         self.assertEqual(source_history["sources"]["efinance"]["error_count"], 1)
+
+    def test_delete_screening_run_removes_persisted_history(self) -> None:
+        payload = {
+            "run_id": "screen-run-delete",
+            "strategy": "dual_low",
+            "market": "cn",
+            "snapshot_source": "sina",
+            "candidate_count": 1,
+            "source_errors": [],
+            "warnings": [],
+            "candidates": [{"rank": 1, "code": "600519", "name": "贵州茅台"}],
+        }
+        self.assertEqual(self.db.save_screening_run(payload), 1)
+        service = ScreeningService(self.config, db_manager=self.db)
+
+        deleted = service.delete_history("screen-run-delete")
+        self.assertEqual(deleted["deleted"], 1)
+        self.assertEqual(deleted["run_id"], "screen-run-delete")
+        self.assertIsNone(self.db.get_screening_run("screen-run-delete"))
+        self.assertEqual(service.history(limit=10)["run_count"], 0)
+
+        with self.assertRaises(HTTPException) as raised:
+            service.delete_history("screen-run-delete")
+        self.assertEqual(raised.exception.status_code, 404)
 
     def test_screening_strategies_declare_dsa_analysis_skill_handoffs(self) -> None:
         strategies = {item.name: item for item in list_strategies()}

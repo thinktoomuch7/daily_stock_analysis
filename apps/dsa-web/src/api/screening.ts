@@ -288,6 +288,12 @@ export type ScreeningRunDetail = ScreeningRunSummary & {
   result: ScreeningScreenResponse;
 };
 
+export type ScreeningHistoryDeleteResponse = {
+  enabled: boolean;
+  deleted: number;
+  runId: string;
+};
+
 export type ScreeningSourceHistory = {
   enabled: boolean;
   runsAnalyzed: number;
@@ -395,6 +401,13 @@ export const screeningApi = {
   async getRun(runId: string): Promise<ScreeningRunDetail> {
     const response = await apiClient.get<Record<string, unknown>>(`/api/v1/screening/history/${encodeURIComponent(runId)}`);
     return toCamelCase<ScreeningRunDetail>(response.data);
+  },
+
+  async deleteRun(runId: string): Promise<ScreeningHistoryDeleteResponse> {
+    const response = await apiClient.delete<Record<string, unknown>>(
+      `/api/v1/screening/history/${encodeURIComponent(runId)}`,
+    );
+    return toCamelCase<ScreeningHistoryDeleteResponse>(response.data);
   },
 
   async getSourceHistory(limit = 100): Promise<ScreeningSourceHistory> {

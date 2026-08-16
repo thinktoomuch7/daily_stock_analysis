@@ -2295,6 +2295,26 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 return None
             return self._screening_run_to_dict(row, include_result=True)
 
+    def delete_screening_run(self, run_id: str) -> int:
+        """Delete one persisted screening run by its stable run id."""
+        normalized_run_id = str(run_id or "").strip()
+        if not normalized_run_id:
+            return 0
+
+        def _write(session: Session) -> int:
+            row = session.execute(
+                select(ScreeningRun).where(ScreeningRun.run_id == normalized_run_id)
+            ).scalar_one_or_none()
+            if row is None:
+                return 0
+            session.delete(row)
+            return 1
+
+        return self._run_write_transaction(
+            f"delete_screening_run[{normalized_run_id}]",
+            _write,
+        )
+
     @staticmethod
     def _optional_int(value: Any) -> Optional[int]:
         if value is None or value == "":

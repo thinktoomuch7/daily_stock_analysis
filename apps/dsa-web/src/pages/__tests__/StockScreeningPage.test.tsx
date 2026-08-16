@@ -5,6 +5,9 @@ import StockScreeningPage from '../StockScreeningPage';
 
 const {
   enableScreening,
+  deleteRun,
+  getHistory,
+  getRun,
   getScreeningStatus,
   getHotspotDetail,
   getHotspots,
@@ -42,6 +45,9 @@ const {
   });
   return {
     enableScreening: vi.fn(),
+    deleteRun: vi.fn(),
+    getHistory: vi.fn(),
+    getRun: vi.fn(),
     getScreeningStatus: vi.fn(),
     getHotspotDetail: vi.fn(),
     getHotspots: vi.fn(),
@@ -68,6 +74,9 @@ vi.mock('../../api/screening', () => ({
   screeningApi: {
     enable: () => enableScreening(),
     getStatus: () => getScreeningStatus(),
+    getHistory: (payload?: unknown) => getHistory(payload),
+    getRun: (runId: string) => getRun(runId),
+    deleteRun: (runId: string) => deleteRun(runId),
     getHotspotDetail: (payload: unknown) => getHotspotDetail(payload),
     getHotspots: (payload: unknown) => getHotspots(payload),
     getStrategies: () => getStrategies(),
@@ -107,6 +116,9 @@ function createDeferred<T>() {
 describe('StockScreeningPage', () => {
   beforeEach(() => {
     enableScreening.mockReset();
+    deleteRun.mockReset();
+    getHistory.mockReset();
+    getRun.mockReset();
     getScreeningStatus.mockReset();
     getHotspotDetail.mockReset();
     getHotspots.mockReset();
@@ -117,6 +129,23 @@ describe('StockScreeningPage', () => {
     screenStocks.mockReset();
     startScreenTask.mockClear();
     getStrategies.mockResolvedValue(mockStrategiesResponse);
+    getHistory.mockResolvedValue({ enabled: true, runs: [], runCount: 0 });
+    deleteRun.mockResolvedValue({ enabled: true, deleted: 1, runId: 'screen-run-1' });
+    getRun.mockResolvedValue({
+      enabled: true,
+      runId: 'screen-run-1',
+      strategy: 'dual_low',
+      market: 'cn',
+      candidateCount: 0,
+      result: {
+        enabled: true,
+        candidates: [],
+        candidateCount: 0,
+        runId: 'screen-run-1',
+        strategy: 'dual_low',
+        market: 'cn',
+      },
+    });
     getHotspotDetail.mockResolvedValue({
       enabled: true,
       provider: 'akshare',
@@ -152,6 +181,8 @@ describe('StockScreeningPage', () => {
     render(<StockScreeningPage />);
 
     expect(await screen.findByText('选股已开启')).toBeInTheDocument();
+    expect(await screen.findByText('选股历史')).toBeInTheDocument();
+    expect(screen.getByText('暂无选股历史')).toBeInTheDocument();
     expect(screen.queryByText(/AlphaSift/)).not.toBeInTheDocument();
     expect(screen.queryByText(/theme_heat/)).not.toBeInTheDocument();
     expect(screen.queryByText('实验功能与风险提示')).not.toBeInTheDocument();
@@ -1346,5 +1377,143 @@ describe('StockScreeningPage', () => {
     expect(screen.getByText('贵州茅台最新公告')).toBeInTheDocument();
     expect(screen.getByText('数据补充提示')).toBeInTheDocument();
     expect(screen.getByText('stock_news_unavailable')).toBeInTheDocument();
+  });
+
+  it('loads persisted screening history and restores a previous run for review', async () => {
+    getScreeningStatus.mockResolvedValueOnce({ enabled: true, available: true });
+    getHistory.mockResolvedValueOnce({
+      enabled: true,
+      runCount: 1,
+      runs: [{
+        runId: 'screen-run-history-1',
+        strategy: 'dual_low',
+        market: 'cn',
+        candidateCount: 1,
+        llmRanked: true,
+        createdAt: '2026-08-12T10:00:00Z',
+        warnings: [],
+      }],
+    });
+    getRun.mockResolvedValueOnce({
+      enabled: true,
+      runId: 'screen-run-history-1',
+      strategy: 'dual_low',
+      market: 'cn',
+      candidateCount: 1,
+      createdAt: '2026-08-12T10:00:00Z',
+      result: {
+        enabled: true,
+        runId: 'screen-run-history-1',
+        strategy: 'dual_low',
+        market: 'cn',
+        candidateCount: 1,
+        llmRanked: true,
+        candidates: [{
+          rank: 1,
+          code: '600519',
+          name: '贵州茅台',
+          score: 88.5,
+          reason: '历史选股候选',
+          industry: '白酒',
+          raw: {},
+        }],
+      },
+    });
+
+    render(<StockScreeningPage />);
+
+    expect(await screen.findByText('选股历史')).toBeInTheDocument();
+    await waitFor(() => expect(getHistory).toHaveBeenCalled());
+    await waitFor(() => expect(getRun).toHaveBeenCalledWith('screen-run-history-1'));
+    expect(await screen.findByText('历史选股结果')).toBeInTheDocument();
+    expect(screen.getByText('贵州茅台')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '当前查看' })).toBeInTheDocument();
+
+    getRun.mockResolvedValueOnce({
+      enabled: true,
+      runId: 'screen-run-history-1',
+      strategy: 'dual_low',
+      market: 'cn',
+      candidateCount: 1,
+      result: {
+        enabled: true,
+        runId: 'screen-run-history-1',
+        strategy: 'dual_low',
+        market: 'cn',
+        candidateCount: 1,
+        candidates: [{
+          rank: 1,
+          code: '600519',
+          name: '贵州茅台',
+          score: 90.1,
+          reason: '再次查看历史选股',
+          raw: {},
+        }],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '当前查看' }));
+    await waitFor(() => expect(getRun).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('再次查看历史选股')).toBeInTheDocument();
+  });
+
+  it('deletes a screening history run after confirmation and clears the viewed result', async () => {
+    getScreeningStatus.mockResolvedValueOnce({ enabled: true, available: true });
+    getHistory.mockResolvedValueOnce({
+      enabled: true,
+      runCount: 1,
+      runs: [{
+        runId: 'screen-run-history-delete',
+        strategy: 'dual_low',
+        market: 'cn',
+        candidateCount: 1,
+        llmRanked: true,
+        createdAt: '2026-08-12T10:00:00Z',
+        warnings: [],
+      }],
+    });
+    getRun.mockResolvedValueOnce({
+      enabled: true,
+      runId: 'screen-run-history-delete',
+      strategy: 'dual_low',
+      market: 'cn',
+      candidateCount: 1,
+      createdAt: '2026-08-12T10:00:00Z',
+      result: {
+        enabled: true,
+        runId: 'screen-run-history-delete',
+        strategy: 'dual_low',
+        market: 'cn',
+        candidateCount: 1,
+        llmRanked: true,
+        candidates: [{
+          rank: 1,
+          code: '600519',
+          name: '贵州茅台',
+          score: 88.5,
+          reason: '待删除的历史选股',
+          industry: '白酒',
+          raw: {},
+        }],
+      },
+    });
+    deleteRun.mockResolvedValueOnce({
+      enabled: true,
+      deleted: 1,
+      runId: 'screen-run-history-delete',
+    });
+
+    render(<StockScreeningPage />);
+
+    expect(await screen.findByText('历史选股结果')).toBeInTheDocument();
+    expect(screen.getByText('贵州茅台')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '删除选股历史 screen-run-history-delete' }));
+    expect(await screen.findByText('删除后该次选股记录将不可恢复，确认删除吗？')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '删除' }));
+
+    await waitFor(() => expect(deleteRun).toHaveBeenCalledWith('screen-run-history-delete'));
+    await waitFor(() => expect(screen.queryByText('贵州茅台')).not.toBeInTheDocument());
+    expect(screen.getByText('暂无选股历史')).toBeInTheDocument();
+    expect(screen.queryByText('历史选股结果')).not.toBeInTheDocument();
   });
 });
